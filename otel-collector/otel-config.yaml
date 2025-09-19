@@ -39,25 +39,21 @@ processors:
   # Resource processor for Cloud Run semantic conventions
   resource:
     attributes:
-      # Service identification - required for observability
+      # Manual attributes from properties.txt / environment
       - key: service.name
-        value: "${SERVICE_NAME}"
+        value: "${env:SERVICE_NAME}"
         action: upsert
       - key: service.version
-        value: "${SERVICE_VERSION}"
-        action: upsert
-      - key: service.instance.id
-        value: "${K_REVISION}"
+        value: "${env:SERVICE_VERSION}"
         action: upsert
       - key: service.namespace
-        value: "${SERVICE_NAMESPACE}"
+        value: "${env:SERVICE_NAMESPACE}"
+        action: upsert
+      - key: deployment.environment
+        value: "${env:DEPLOYMENT_ENVIRONMENT}"
         action: upsert
       
-      # Deployment context
-      - key: deployment.environment
-        value: "${DEPLOYMENT_ENVIRONMENT}"
-        action: upsert
-        
+       
       # Cloud provider semantic conventions (stable)
       - key: cloud.provider
         value: "gcp"
@@ -72,16 +68,16 @@ processors:
         value: "${GCP_PROJECT_ID}"
         action: upsert
         
-      # Function-as-a-Service semantic conventions
-      - key: faas.name
-        value: "${K_SERVICE}"
-        action: upsert
-      - key: faas.version
-        value: "${K_REVISION}"
-        action: upsert
-      - key: faas.instance
-        value: "${HOSTNAME}"
-        action: upsert
+      # # Function-as-a-Service semantic conventions
+      # - key: faas.name
+      #   value: "${K_SERVICE}"
+      #   action: upsert
+      # - key: faas.version
+      #   value: "${K_REVISION}"
+      #   action: upsert
+      # - key: faas.instance
+      #   value: "${HOSTNAME}"
+      #   action: upsert
         
       # GCP specific attributes for better correlation
       - key: gcp.project_id
@@ -166,12 +162,6 @@ exporters:
       queue_size: 5000
       storage: file_storage  # Persistent queue across restarts
 
-  # Optional: Backup exporter for high availability
-  # Uncomment if you need a secondary destination
-  # otlp/backup:
-  #   endpoint: "${BACKUP_ENDPOINT}"
-  #   headers:
-  #     Authorization: "Bearer ${BACKUP_TOKEN}"
 
 extensions:
   # Health check extension for Kubernetes/Cloud Run probes
@@ -183,73 +173,37 @@ extensions:
       interval: 5s
       exporter_failure_threshold: 5
 
-  # File storage for persistent queues (enterprise reliability)
-  file_storage:
-    directory: /tmp/otel-storage
-    timeout: 1s
-    compaction:
-      directory: /tmp/otel-storage-compacted
-      on_start: true
-      on_rebound: true
-
   # Memory ballast for GC stability in high-throughput scenarios
   memory_ballast:
     size_mib: 64
 
-  # Performance profiler for troubleshooting (disable in production)
-  # pprof:
-  #   endpoint: localhost:1777
-
-  # Zpages extension for internal metrics and debugging
-  zpages:
-    endpoint: localhost:55679
 
 service:
   # Extensions to load
   extensions:
     - health_check
-    - file_storage
     - memory_ballast
-    - zpages
+
     
   # Telemetry pipelines
   pipelines:
     # Traces pipeline - high-value observability data
     traces:
-      receivers:
-        - otlp
-      processors:
-        - memory_limiter    # Always first
-        - resource         # Add resource attributes
-        - transform        # Normalize and enrich
-        - filter          # Remove sensitive data
-        - probabilistic_sampler  # Control volume
-        - batch           # Optimize transmission
-      exporters:
-        - otlp/dynatrace
+      receivers: [otlp]
+      processors: [memory_limiter, resource, transform, filter, probabilistic_sampler, batch]
+      exporters: [otlp/dynatrace]
 
     # Metrics pipeline - application performance data
     metrics:
-      receivers:
-        - otlp
-      processors:
-        - memory_limiter
-        - resource
-        - transform
-        - batch
-      exporters:
-        - otlp/dynatrace
+      receivers: [otlp]
+      processors: [memory_limiter, resource, transform, batch]
+      exporters: [otlp/dynatrace]
 
     # Logs pipeline - structured application logs
     logs:
-      receivers:
-        - otlp
-      processors:
-        - memory_limiter
-        - resource
-        - batch
-      exporters:
-        - otlp/dynatrace
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp/dynatrace]
 
   # Collector's own telemetry configuration
   telemetry:
