@@ -1,0 +1,275 @@
+# OpenTelemetry Collector Enterprise Configuration
+# Optimized for production Cloud Run environments with Dynatrace
+# Follows latest OTEL contrib standards and security best practices
+
+receivers:
+  # OTLP receiver for traces and metrics from instrumented applications
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        # Security: Use localhost in future versions for local-only access
+        max_recv_msg_size: 4194304  # 4MB max message size
+        max_concurrent_streams: 100
+        keepalive:
+          server_parameters:
+            max_connection_idle: 11s
+            max_connection_age: 12s
+            max_connection_age_grace: 13s
+            time: 30s
+            timeout: 5s
+          enforcement_policy:
+            min_time: 10s
+            permit_without_stream: true
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - "http://localhost:*"
+            - "https://localhost:*"
+        max_request_body_size: 4194304
+
+processors:
+  # Memory limiter to prevent OOM - first processor in pipeline
+  memory_limiter:
+    limit_percentage: 75        # Use 75% of available memory
+    spike_limit_percentage: 20  # Allow 20% spike above limit
+    check_interval: 2s
+
+  # Resource processor for Cloud Run semantic conventions
+  resource:
+    attributes:
+      # Service identification - required for observability
+      - key: service.name
+        value: "${SERVICE_NAME}"
+        action: upsert
+      - key: service.version
+        value: "${SERVICE_VERSION}"
+        action: upsert
+      - key: service.instance.id
+        value: "${K_REVISION}"
+        action: upsert
+      - key: service.namespace
+        value: "${SERVICE_NAMESPACE}"
+        action: upsert
+      
+      # Deployment context
+      - key: deployment.environment
+        value: "${DEPLOYMENT_ENVIRONMENT}"
+        action: upsert
+        
+      # Cloud provider semantic conventions (stable)
+      - key: cloud.provider
+        value: "gcp"
+        action: upsert
+      - key: cloud.platform
+        value: "gcp_cloud_run"
+        action: upsert
+      - key: cloud.region
+        value: "${CLOUD_RUN_REGION}"
+        action: upsert
+      - key: cloud.account.id
+        value: "${GCP_PROJECT_ID}"
+        action: upsert
+        
+      # Function-as-a-Service semantic conventions
+      - key: faas.name
+        value: "${K_SERVICE}"
+        action: upsert
+      - key: faas.version
+        value: "${K_REVISION}"
+        action: upsert
+      - key: faas.instance
+        value: "${HOSTNAME}"
+        action: upsert
+        
+      # GCP specific attributes for better correlation
+      - key: gcp.project_id
+        value: "${GCP_PROJECT_ID}"
+        action: upsert
+      - key: gcp.cloud_run.service.name
+        value: "${K_SERVICE}"
+        action: upsert
+      - key: gcp.cloud_run.service.revision
+        value: "${K_REVISION}"
+        action: upsert
+
+  # Batch processor for efficient data transmission
+  batch:
+    timeout: 1s                    # Max wait before sending batch
+    send_batch_size: 1024         # Optimal batch size for most backends
+    send_batch_max_size: 2048     # Emergency batch size limit
+    metadata_keys:                # Include metadata in batching decisions
+      - "X-Forwarded-For"
+      - "User-Agent"
+
+  # Transform processor for data enrichment and normalization
+  transform:
+    error_mode: ignore  # Continue processing on transformation errors
+    
+    trace_statements:
+      - context: span
+        statements:
+          # Normalize HTTP attributes to latest semantic conventions
+          - set(attributes["http.request.method"], attributes["http.method"]) where attributes["http.method"] != nil
+          - set(attributes["http.response.status_code"], attributes["http.status_code"]) where attributes["http.status_code"] != nil
+          - set(attributes["url.full"], attributes["http.url"]) where attributes["http.url"] != nil
+          
+          # Add deployment context to spans
+          - set(attributes["deployment.environment"], resource.attributes["deployment.environment"]) where resource.attributes["deployment.environment"] != nil
+          - set(attributes["service.version"], resource.attributes["service.version"]) where resource.attributes["service.version"] != nil
+          
+          # Cloud Run specific enrichment
+          - set(attributes["gcp.cloud_run.service"], resource.attributes["faas.name"]) where resource.attributes["faas.name"] != nil
+          
+    metric_statements:
+      - context: datapoint
+        statements:
+          # Add service context to metrics
+          - set(attributes["service.name"], resource.attributes["service.name"]) where resource.attributes["service.name"] != nil
+          - set(attributes["deployment.environment"], resource.attributes["deployment.environment"]) where resource.attributes["deployment.environment"] != nil
+
+  # Probabilistic sampler for trace volume control (enterprise feature)
+  probabilistic_sampler:
+    sampling_percentage: 100  # Adjust based on traffic volume
+    hash_seed: 22             # Consistent sampling across collectors
+
+  # Filter processor to remove sensitive data
+  filter:
+    error_mode: ignore
+    traces:
+      span:
+        # Remove spans with sensitive URLs or operations
+        - 'attributes["http.url"] != nil and IsMatch(attributes["http.url"], ".*/(health|metrics|debug).*")'
+        - 'attributes["db.statement"] != nil and IsMatch(attributes["db.statement"], ".*(password|token|secret).*")'
+
+exporters:
+  # Primary Dynatrace exporter using OTLP
+  otlp/dynatrace:
+    endpoint: "${DT_ENDPOINT}/api/v2/otlp"
+    headers:
+      Authorization: "Api-Token ${DT_API_TOKEN}"
+    compression: gzip
+    timeout: 30s
+    
+    # Retry configuration for reliability
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 120s
+    
+    # Queue configuration for reliability
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 5000
+      storage: file_storage  # Persistent queue across restarts
+
+  # Optional: Backup exporter for high availability
+  # Uncomment if you need a secondary destination
+  # otlp/backup:
+  #   endpoint: "${BACKUP_ENDPOINT}"
+  #   headers:
+  #     Authorization: "Bearer ${BACKUP_TOKEN}"
+
+extensions:
+  # Health check extension for Kubernetes/Cloud Run probes
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /
+    check_collector_pipeline:
+      enabled: true
+      interval: 5s
+      exporter_failure_threshold: 5
+
+  # File storage for persistent queues (enterprise reliability)
+  file_storage:
+    directory: /tmp/otel-storage
+    timeout: 1s
+    compaction:
+      directory: /tmp/otel-storage-compacted
+      on_start: true
+      on_rebound: true
+
+  # Memory ballast for GC stability in high-throughput scenarios
+  memory_ballast:
+    size_mib: 64
+
+  # Performance profiler for troubleshooting (disable in production)
+  # pprof:
+  #   endpoint: localhost:1777
+
+  # Zpages extension for internal metrics and debugging
+  zpages:
+    endpoint: localhost:55679
+
+service:
+  # Extensions to load
+  extensions:
+    - health_check
+    - file_storage
+    - memory_ballast
+    - zpages
+    
+  # Telemetry pipelines
+  pipelines:
+    # Traces pipeline - high-value observability data
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter    # Always first
+        - resource         # Add resource attributes
+        - transform        # Normalize and enrich
+        - filter          # Remove sensitive data
+        - probabilistic_sampler  # Control volume
+        - batch           # Optimize transmission
+      exporters:
+        - otlp/dynatrace
+
+    # Metrics pipeline - application performance data
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource
+        - transform
+        - batch
+      exporters:
+        - otlp/dynatrace
+
+    # Logs pipeline - structured application logs
+    logs:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource
+        - batch
+      exporters:
+        - otlp/dynatrace
+
+  # Collector's own telemetry configuration
+  telemetry:
+    logs:
+      level: info           # Use 'warn' or 'error' in production
+      development: false
+      sampling:
+        enabled: true
+        initial: 10
+        thereafter: 100
+    
+    metrics:
+      level: detailed       # Internal collector metrics
+      address: 0.0.0.0:8888
+      
+    traces:
+      level: none          # Disable self-tracing in production
+      
+    # Resource attributes for collector's own telemetry
+    resource:
+      service.name: "otel-collector"
+      service.version: "${OTEL_COLLECTOR_VERSION}"
+      deployment.environment: "${DEPLOYMENT_ENVIRONMENT}"

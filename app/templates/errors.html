@@ -1,0 +1,551 @@
+{% extends "base.html" %}
+
+{% block title %}Error Testing - FastAPI OpenTelemetry{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="display-6"><i class="bi bi-exclamation-triangle text-warning"></i> Error Testing & Simulation</h1>
+            <div class="btn-group">
+                <button class="btn btn-outline-success" onclick="resetAllErrors()">
+                    <i class="bi bi-arrow-clockwise"></i> Reset All
+                </button>
+                <button class="btn btn-outline-info" onclick="loadErrorStats()">
+                    <i class="bi bi-graph-up"></i> Refresh Stats
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Error Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <i class="bi bi-exclamation-circle display-4 text-danger"></i>
+                <h3 class="mt-2 mb-1" id="total-errors">--</h3>
+                <small class="text-muted">Total Errors</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <i class="bi bi-arrow-repeat display-4 text-info"></i>
+                <h3 class="mt-2 mb-1" id="total-requests">--</h3>
+                <small class="text-muted">Total Requests</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <i class="bi bi-percent display-4 text-warning"></i>
+                <h3 class="mt-2 mb-1" id="error-rate">--</h3>
+                <small class="text-muted">Error Rate (%)</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <i class="bi bi-heart-pulse display-4 text-success"></i>
+                <h3 class="mt-2 mb-1" id="health-failures">--</h3>
+                <small class="text-muted">Health Check Failures</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Error Simulation Controls -->
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-bug text-danger"></i> API Error Simulation
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="database-errors" onchange="toggleErrorSimulation('api', 'database_errors', this.checked)">
+                    <label class="form-check-label" for="database-errors">
+                        <i class="bi bi-database-exclamation text-danger"></i> Database Connection Errors
+                    </label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="validation-errors" onchange="toggleErrorSimulation('api', 'validation_errors', this.checked)">
+                    <label class="form-check-label" for="validation-errors">
+                        <i class="bi bi-check-square text-warning"></i> Validation Errors
+                    </label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="service-errors" onchange="toggleErrorSimulation('api', 'service_errors', this.checked)">
+                    <label class="form-check-label" for="service-errors">
+                        <i class="bi bi-cloud-slash text-info"></i> External Service Errors
+                    </label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="rate-limit-errors" onchange="toggleErrorSimulation('api', 'rate_limit_errors', this.checked)">
+                    <label class="form-check-label" for="rate-limit-errors">
+                        <i class="bi bi-speedometer2 text-primary"></i> Rate Limit Errors
+                    </label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="random-errors" onchange="toggleErrorSimulation('api', 'random_errors', this.checked)">
+                    <label class="form-check-label" for="random-errors">
+                        <i class="bi bi-question-circle text-secondary"></i> Random Errors
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-heart text-success"></i> Health Check Simulation
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="intermittent-failures" onchange="toggleErrorSimulation('health', 'intermittent_failures', this.checked)">
+                    <label class="form-check-label" for="intermittent-failures">
+                        <i class="bi bi-arrow-repeat text-danger"></i> Intermittent Failures
+                    </label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="memory-pressure" onchange="toggleErrorSimulation('health', 'memory_pressure', this.checked)">
+                    <label class="form-check-label" for="memory-pressure">
+                        <i class="bi bi-memory text-warning"></i> Memory Pressure
+                    </label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="disk-pressure" onchange="toggleErrorSimulation('health', 'disk_pressure', this.checked)">
+                    <label class="form-check-label" for="disk-pressure">
+                        <i class="bi bi-hdd text-info"></i> Disk Pressure
+                    </label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="slow-responses" onchange="toggleErrorSimulation('health', 'slow_responses', this.checked)">
+                    <label class="form-check-label" for="slow-responses">
+                        <i class="bi bi-hourglass text-primary"></i> Slow Responses
+                    </label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="cascade-failures" onchange="toggleErrorSimulation('health', 'cascade_failures', this.checked)">
+                    <label class="form-check-label" for="cascade-failures">
+                        <i class="bi bi-diagram-3 text-secondary"></i> Cascade Failures
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Manual Error Triggers -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-lightning text-warning"></i> Manual Error Triggers
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-danger w-100" onclick="triggerError('500')">
+                            <i class="bi bi-x-circle"></i> 500 Internal Error
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-warning w-100" onclick="triggerError('503')">
+                            <i class="bi bi-exclamation-triangle"></i> 503 Service Unavailable
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-info w-100" onclick="triggerError('timeout')">
+                            <i class="bi bi-hourglass"></i> Timeout Error
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-secondary w-100" onclick="triggerError('memory_leak')">
+                            <i class="bi bi-memory"></i> Memory Spike
+                        </button>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-primary w-100" onclick="triggerError('database_error')">
+                            <i class="bi bi-database"></i> Database Error
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-success w-100" onclick="triggerError('validation_error')">
+                            <i class="bi bi-check-square"></i> Validation Error
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-dark w-100" onclick="triggerError('auth_error')">
+                            <i class="bi bi-shield-x"></i> Auth Error
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-danger w-100" onclick="triggerError('rate_limit')">
+                            <i class="bi bi-speedometer2"></i> Rate Limit
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chaos Engineering -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-hurricane text-danger"></i> Chaos Engineering
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-2">
+                        <button class="btn btn-danger w-100" onclick="triggerChaosMonkey()">
+                            <i class="bi bi-lightning-charge"></i> Chaos Monkey
+                        </button>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <button class="btn btn-warning w-100" onclick="triggerLoadTest()">
+                            <i class="bi bi-speedometer"></i> Load Test
+                        </button>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <button class="btn btn-info w-100" onclick="generateTraffic(50)">
+                            <i class="bi bi-broadcast"></i> Generate Traffic
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Error Log -->
+<div class="row">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-journal-text text-info"></i> Recent Error Log
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="error-log" class="font-monospace small" style="max-height: 400px; overflow-y: auto;">
+                    Loading error log...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Load initial data when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadErrorStats();
+    loadSimulationStatus();
+    setInterval(loadErrorStats, 5000); // Update every 5 seconds
+});
+
+// Load error statistics
+async function loadErrorStats() {
+    try {
+        const response = await fetch('/api/error-tracking');
+        const data = await response.json();
+        
+        document.getElementById('total-errors').textContent = data.total_errors;
+        document.getElementById('total-requests').textContent = data.total_requests;
+        document.getElementById('error-rate').textContent = data.error_rate_percent + '%';
+        
+        // Update error log
+        updateErrorLog(data);
+        
+        // Get health check failures
+        const healthResponse = await fetch('/api/health-simulation/status');
+        const healthData = await healthResponse.json();
+        document.getElementById('health-failures').textContent = healthData.health_check_failures;
+        
+    } catch (error) {
+        console.error('Error loading stats:', error);
+        showToast('Error loading statistics', 'error');
+    }
+}
+
+// Load simulation status and update switches
+async function loadSimulationStatus() {
+    try {
+        // Load API simulation status
+        const apiResponse = await fetch('/api/error-simulation/status');
+        const apiData = await apiResponse.json();
+        
+        for (const [key, value] of Object.entries(apiData.error_simulation_status)) {
+            const checkbox = document.getElementById(key.replace('_', '-'));
+            if (checkbox) checkbox.checked = value;
+        }
+        
+        // Load health simulation status  
+        const healthResponse = await fetch('/api/health-simulation/status');
+        const healthData = await healthResponse.json();
+        
+        for (const [key, value] of Object.entries(healthData.health_simulation_status)) {
+            const checkbox = document.getElementById(key.replace('_', '-'));
+            if (checkbox) checkbox.checked = value;
+        }
+        
+    } catch (error) {
+        console.error('Error loading simulation status:', error);
+    }
+}
+
+// Toggle error simulation
+async function toggleErrorSimulation(type, errorType, enabled) {
+    try {
+        const endpoint = type === 'api' ? '/api/error-simulation/enable' : '/api/health-simulation/enable';
+        const payload = { [errorType]: enabled };
+        
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        if (response.ok) {
+            showToast(`${errorType} ${enabled ? 'enabled' : 'disabled'}`, 'info');
+        } else {
+            throw new Error('Failed to toggle simulation');
+        }
+        
+    } catch (error) {
+        console.error('Error toggling simulation:', error);
+        showToast('Error updating simulation', 'error');
+    }
+}
+
+// Trigger specific error
+async function triggerError(errorType) {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Triggering...';
+    button.disabled = true;
+    
+    try {
+        const response = await fetch('/api/test-errors', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ error_type: errorType })
+        });
+        
+        if (response.ok) {
+            showToast(`${errorType} triggered successfully`, 'warning');
+        } else {
+            showToast(`${errorType} error triggered (as expected)`, 'info');
+        }
+        
+        // Refresh stats after a delay
+        setTimeout(loadErrorStats, 1000);
+        
+    } catch (error) {
+        showToast(`Error triggered: ${errorType}`, 'warning');
+        setTimeout(loadErrorStats, 1000);
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// Trigger chaos monkey
+async function triggerChaosMonkey() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Unleashing Chaos...';
+    button.disabled = true;
+    
+    try {
+        const response = await fetch('/api/chaos-monkey', {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast(`Chaos scenarios: ${result.triggered_scenarios.join(', ')}`, 'warning');
+        } else {
+            showToast('Chaos monkey execution failed', 'error');
+        }
+        
+        setTimeout(loadErrorStats, 2000);
+        
+    } catch (error) {
+        showToast('Chaos monkey triggered errors (as expected)', 'info');
+        setTimeout(loadErrorStats, 2000);
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// Trigger load test
+async function triggerLoadTest() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Load Testing...';
+    button.disabled = true;
+    
+    try {
+        const response = await fetch('/api/load-test', {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            showToast(`Load test completed: ${result.operations} operations`, 'success');
+        } else {
+            showToast('Load test completed with errors', 'warning');
+        }
+        
+        setTimeout(loadErrorStats, 2000);
+        
+    } catch (error) {
+        showToast('Load test triggered system stress', 'info');
+        setTimeout(loadErrorStats, 2000);
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// Generate traffic
+async function generateTraffic(count) {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generating...';
+    button.disabled = true;
+    
+    try {
+        const promises = [];
+        for (let i = 0; i < count; i++) {
+            promises.push(fetch('/api/health').catch(() => {}));
+            if (i % 5 === 0) promises.push(fetch('/api/metrics').catch(() => {}));
+            if (i % 10 === 0) promises.push(fetch('/api/users').catch(() => {}));
+        }
+        
+        await Promise.all(promises);
+        showToast(`${count} requests completed`, 'success');
+        
+        setTimeout(loadErrorStats, 1000);
+        
+    } catch (error) {
+        showToast('Traffic generation completed with some errors', 'info');
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// Reset all errors
+async function resetAllErrors() {
+    try {
+        // Reset error tracking
+        await fetch('/api/clear-error-tracking', { method: 'POST' });
+        
+        // Reset error simulations
+        await fetch('/api/reset-errors', { method: 'POST' });
+        
+        showToast('All error statistics and simulations reset', 'success');
+        
+        // Reload page state
+        loadErrorStats();
+        loadSimulationStatus();
+        
+    } catch (error) {
+        console.error('Error resetting:', error);
+        showToast('Error during reset', 'error');
+    }
+}
+
+// Update error log display
+function updateErrorLog(data) {
+    const errorLog = document.getElementById('error-log');
+    
+    let logContent = `<div class="mb-2"><strong>Error Statistics:</strong></div>`;
+    
+    if (data.error_types && Object.keys(data.error_types).length > 0) {
+        logContent += `<div class="mb-3">`;
+        for (const [type, count] of Object.entries(data.error_types)) {
+            logContent += `<div class="text-muted">${type}: ${count} occurrences</div>`;
+        }
+        logContent += `</div>`;
+    }
+    
+    if (data.last_error) {
+        logContent += `<div class="mb-2"><strong>Last Error:</strong></div>`;
+        logContent += `<div class="text-danger mb-1">${data.last_error.timestamp}</div>`;
+        logContent += `<div class="text-muted mb-1">${data.last_error.method} ${data.last_error.path}</div>`;
+        logContent += `<div class="text-warning">${data.last_error.error}</div>`;
+    } else {
+        logContent += `<div class="text-success">No recent errors</div>`;
+    }
+    
+    errorLog.innerHTML = logContent;
+}
+
+// Toast notification function
+function showToast(message, type = 'info') {
+    const toastContainer = document.getElementById('toast-container') || createToastContainer();
+    
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${message}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+}
+
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '1055';
+    document.body.appendChild(container);
+    return container;
+}
+</script>
+{% endblock %}

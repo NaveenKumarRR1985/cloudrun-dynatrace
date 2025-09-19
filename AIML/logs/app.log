@@ -1,0 +1,15 @@
+2025-09-19 10:54:07,692 - main - INFO - Starting up ML Model Serving API
+2025-09-19 10:54:21,858 - main - INFO - Health check requested
+2025-09-19 10:54:25,497 - main - ERROR - Unexpected error in prediction: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 127476517246656 and this is thread id 127476595321728.
+2025-09-19 10:54:28,751 - main - INFO - Starting model training (simulated delay: 5s)
+2025-09-19 10:54:33,753 - main - INFO - Model training completed
+2025-09-19 10:54:44,349 - main - INFO - Background task queued for message: Hello from background task!
+2025-09-19 10:54:49,351 - main - INFO - Background task completed: Hello from background task!
+2025-09-19 10:59:04,232 - main - INFO - Starting up ML Model Serving API
+2025-09-19 10:59:20,019 - main - INFO - Health check requested
+2025-09-19 10:59:23,264 - main - INFO - Prediction made: 8.7 for features: [1.5, 2.3, 4.1, 0.8]
+2025-09-19 10:59:27,428 - main - INFO - Starting model training (simulated delay: 19s)
+2025-09-19 10:59:46,430 - main - INFO - Model training completed
+2025-09-19 10:59:55,178 - main - INFO - Retrieved 1 predictions from database
+2025-09-19 11:00:02,677 - main - INFO - Background task queued for message: Hello from background task!
+2025-09-19 11:00:07,679 - main - INFO - Background task completed: Hello from background task!

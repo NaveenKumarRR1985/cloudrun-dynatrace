@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - FastAPI OpenTelemetry{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="display-6"><i class="bi bi-speedometer2 text-primary"></i> Enhanced Dashboard</h1>
+            <div class="d-flex gap-2">
+                <div class="badge bg-success fs-6" id="status-badge">
+                    <i class="bi bi-check-circle"></i> System Healthy
+                </div>
+                <div class="badge bg-info fs-6" id="hostname-badge">
+                    <i class="bi bi-server"></i> <span id="hostname">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced System Metrics Cards -->
+<div class="row mb-4">
+    <div class="col-xl-2 col-lg-3 col-md-6 mb-3">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-cpu metric-icon text-primary"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="card-title text-muted mb-1">CPU Usage</h6>
+                        <h3 class="mb-0" id="cpu-usage">--</h3>
+                        <small class="text-muted" id="cpu-details">-- cores @ -- GHz</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-lg-3 col-md-6 mb-3">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-memory metric-icon text-success"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="card-title text-muted mb-1">Memory</h6>
+                        <h3 class="mb-0" id="memory-usage">--</h3>
+                        <small class="text-muted" id="memory-details">-- / -- GB</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-lg-3 col-md-6 mb-3">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-hdd metric-icon text-warning"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="card-title text-muted mb-1">Disk</h6>
+                        <h3 class="mb-0" id="disk-usage">--</h3>
+                        <small class="text-muted" id="disk-details">-- / -- GB</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-lg-3 col-md-6 mb-3">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-wifi metric-icon text-info"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="card-title text-muted mb-1">Network</h6>
+                        <h3 class="mb-0" id="network-usage">--</h3>
+                        <small class="text-muted" id="network-details">↑-- ↓--</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-lg-3 col-md-6 mb-3">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-people metric-icon text-purple"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="card-title text-muted mb-1">Users</h6>
+                        <h3 class="mb-0" id="total-users">--</h3>
+                        <small class="text-muted">Active users</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-lg-3 col-md-6 mb-3">
+        <div class="card metric-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-graph-up metric-icon text-danger"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="card-title text-muted mb-1">Requests</h6>
+                        <h3 class="mb-0" id="total-requests">--</h3>
+                        <small class="text-muted" id="requests-details">-- threads</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced Charts Row -->
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-activity text-primary"></i> System Performance Monitor
+                </h5>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary active" onclick="setTimeRange('1m')">1m</button>
+                    <button class="btn btn-outline-primary" onclick="setTimeRange('5m')">5m</button>
+                    <button class="btn btn-outline-primary" onclick="setTimeRange('15m')">15m</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <canvas id="performanceChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- <div class="col-lg-4 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-pie-chart text-success"></i> Resource Distribution
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="resourceChart"></canvas>
+                <div class="mt-3">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <small class="text-muted">CPU</small>
+                            <div class="fw-bold" id="resource-cpu">--</div>
+                        </div>
+                        <div class="col-4">
+                            <small class="text-muted">Memory</small>
+                            <div class="fw-bold" id="resource-memory">--</div>
+                        </div>
+                        <div class="col-4">
+                            <small class="text-muted">Disk</small>
+                            <div class="fw-bold" id="resource-disk">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div> -->
+</div>
+
+<!-- Application Performance Row -->
+<div class="row mb-4">
+    <div class="col-lg-6 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-stopwatch text-info"></i> Application Performance
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="appPerformanceChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-diagram-3 text-warning"></i> Network Activity
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="networkChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Information & Quick Actions -->
+<!-- Quick Actions & Tests -->
+<div class="row">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-lightning text-warning"></i> Quick Actions & Tests
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-primary w-100" onclick="simulateWork()">
+                            <i class="bi bi-play-circle"></i> Simulate Work
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-success w-100" onclick="stressTest()">
+                            <i class="bi bi-speedometer2"></i> CPU Stress
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-info w-100" onclick="memoryTest()">
+                            <i class="bi bi-memory"></i> Memory Test
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-danger w-100" onclick="generateTraffic(25)">
+                            <i class="bi bi-broadcast-pin"></i> Generate Traffic
+                        </button>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-3 mb-2">
+                        <a href="/users-ui" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-person-plus"></i> Add User
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="/metrics-ui" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-graph-up"></i> Detailed Metrics
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="/api/docs" target="_blank" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-code-square"></i> API Docs
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-warning w-100" onclick="refreshMetrics()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh All
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize enhanced dashboard when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    initializeEnhancedDashboard();
+    setInterval(updateEnhancedDashboard, 3000); // Update every 3 seconds
+});
+
+let timeRange = '1m';
+function setTimeRange(range) {
+    timeRange = range;
+    // Update active button
+    document.querySelectorAll('.btn-group .btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    updateChartTimeRange();
+}
+</script>
+{% endblock %}

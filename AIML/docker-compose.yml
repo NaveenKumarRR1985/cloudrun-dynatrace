@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  ml-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - DEBUG=true
+      - DB_PATH=/app/data/predictions.db
+      - LOG_FILE=/app/logs/app.log
+
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - otel-collector
+    networks:
+      - aiml-network
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otelcol-contrib/otel-config.yaml"]
+    volumes:
+      - ./otel-config.yaml:/etc/otelcol-contrib/otel-config.yaml
+    ports:
+      - "1888:1888"   # pprof extension
+      - "8888:8888"   # Prometheus metrics
+      - "8889:8889"   # Prometheus exporter metrics
+      - "13133:13133" # health_check extension
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "55679:55679" # zpages extension
+    environment:
+      # Dynatrace configuration - replace with your actual values
+      - DYNATRACE_ENDPOINT=https://your-environment.live.dynatrace.com/api/v2/otlp
+      - DYNATRACE_API_TOKEN=your-dynatrace-api-token
+    networks:
+      - aiml-network
+
+networks:
+  aiml-network:
+    driver: bridge
