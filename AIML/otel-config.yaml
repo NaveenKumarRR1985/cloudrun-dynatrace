@@ -3,83 +3,170 @@ receivers:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
+        keepalive:
+          server_parameters:
+            max_connection_idle: 11s
+            max_connection_age: 12s
+            max_connection_age_grace: 13s
+            time: 30s
+            timeout: 5s
+          enforcement_policy:
+            min_time: 10s
+            permit_without_stream: true
       http:
         endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - "http://localhost:*"
+            - "https://localhost:*"
+        max_request_body_size: 4194304
 
 processors:
-  batch:
-    timeout: 1s
-    send_batch_size: 1024
-    send_batch_max_size: 2048
-  
+  # Memory limiter to prevent OOM - should be first in pipeline
+  memory_limiter:
+    limit_percentage: 75        # Use 75% of available memory
+    spike_limit_percentage: 20  # Allow 20% spike above limit
+    check_interval: 2s
+
+  # Resource processor to add/modify resource attributes
   resource:
     attributes:
       - key: deployment.environment
         value: "local"
         action: insert
       - key: service.instance.id
-        from_attribute: service.name
+        value: test
         action: insert
+      - key: collector.name
+        value: "cloud-run"
+        action: insert
+      # Uncomment and modify these for your environment
+      # - key: service.name
+      #   value: "${env:SERVICE_NAME}"
+      #   action: upsert
+      # - key: service.version
+      #   value: "${env:SERVICE_VERSION}"
+      #   action: upsert
+      # - key: service.namespace
+      #   value: "${env:SERVICE_NAMESPACE}"
+      #   action: upsert
 
-  # Memory limiter to prevent OOM
-  memory_limiter:
-    limit_mib: 512
-    check_interval: 2s
+  # Batch processor - optimized for low latency
+  batch:
+    timeout: 1s                 # Send data every 1 second max
+    send_batch_size: 100        # Reduced batch size for faster processing
+    send_batch_max_size: 512    # Maximum batch size
+    metadata_keys:              # Include metadata in batching decisions
+      - "X-Forwarded-For"
+      - "User-Agent"
+
+  # Convert cumulative metrics to delta (required for some backends)
+  cumulativetodelta:
+
+  # Transform processor for attribute manipulation
+  transform:
+    error_mode: ignore          # Continue processing on transformation errors
+    
+    trace_statements:
+      - context: span
+        statements:
+          # Normalize HTTP attributes to latest semantic conventions
+          - set(attributes["http.request.method"], attributes["http.method"]) where attributes["http.method"] != nil
+          - set(attributes["http.response.status_code"], attributes["http.status_code"]) where attributes["http.status_code"] != nil
+          - set(attributes["url.full"], attributes["http.url"]) where attributes["http.url"] != nil
+          
+          # Add deployment context to spans
+          - set(attributes["deployment.environment"], resource.attributes["deployment.environment"]) where resource.attributes["deployment.environment"] != nil
+          - set(attributes["service.version"], resource.attributes["service.version"]) where resource.attributes["service.version"] != nil
+          
+    metric_statements:
+      - context: datapoint
+        statements:
+          # Add service context to metrics
+          - set(attributes["service.name"], resource.attributes["service.name"]) where resource.attributes["service.name"] != nil
+          - set(attributes["deployment.environment"], resource.attributes["deployment.environment"]) where resource.attributes["deployment.environment"] != nil
+
+  # Probabilistic sampler for trace volume control
+  probabilistic_sampler:
+    sampling_percentage: 100    # Adjust based on traffic volume (100 = no sampling)
+    hash_seed: 22              # Consistent sampling across collectors
+
+  # Filter processor to remove sensitive/unwanted data
+  filter:
+    error_mode: ignore
+    traces:
+      span:
+        # Remove spans with sensitive URLs or operations
+        - 'attributes["http.url"] != nil and IsMatch(attributes["http.url"], ".*/(health|metrics|debug).*")'
+        - 'attributes["db.statement"] != nil and IsMatch(attributes["db.statement"], ".*(password|token|secret).*")'
 
 exporters:
-  # Debug exporter for local testing (replaces deprecated logging exporter)
+  # Debug exporter for local testing and troubleshooting
   debug:
     verbosity: detailed
     sampling_initial: 5
     sampling_thereafter: 200
 
-  # Dynatrace exporter - configure with your Dynatrace details
+  # Dynatrace OTLP exporter - main production exporter
   otlphttp/dynatrace:
-    endpoint: "##############"
+    endpoint: "https://####.live.dynatrace.com/api/v2/otlp"
     headers:
-      Authorization: "Api-Token dt0c01.##################################"
-    compression: gzip
-
-  # Alternative OTLP HTTP exporter for other backends
-  otlphttp:
-    endpoint: "http://localhost:4318"
-    compression: gzip
-
-  # OTLP gRPC exporter
-  otlp:
-    endpoint: "localhost:4317"
-    tls:
-      insecure: true
+      Authorization: "Api-Token #####"  # Replace with your actual token
+    timeout: 30s                              # Explicit timeout for HTTP requests
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s                    # Initial retry delay
+      max_interval: 30s                       # Maximum retry delay
+      max_elapsed_time: 300s                  # Total retry time limit
+    sending_queue:
+      enabled: true
+      num_consumers: 10                       # Number of concurrent senders
+      queue_size: 1000                        # Queue size for buffering
+    compression: gzip                         # Enable compression
 
 extensions:
+  # Health check endpoint for monitoring collector status
   health_check:
     endpoint: 0.0.0.0:13133
-  pprof:
-    endpoint: 0.0.0.0:1777
-  zpages:
-    endpoint: 0.0.0.0:55679
+    path: /
+    check_collector_pipeline:
+      enabled: true
+      interval: 5s
+      exporter_failure_threshold: 5
 
 service:
-  extensions: [health_check, pprof, zpages]
+  extensions: [health_check]
   
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
-      exporters: [debug, otlphttp/dynatrace]
-    
-    metrics:
-      receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
-      exporters: [debug, otlphttp/dynatrace]
-    
-    logs:
-      receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
-      exporters: [debug, otlphttp/dynatrace]
-
+  # Telemetry configuration for the collector itself
   telemetry:
     logs:
-      level: "debug"
+      level: "info"                          # Set to "debug" for detailed troubleshooting
+      development: false
+      encoding: "json"
+      disable_caller: false
+      disable_stacktrace: false
+      initial_fields:
+        service: "otel-collector"
     metrics:
-      level: detailed
+      level: detailed                        # Collector's own metrics
+           
+
+  # Processing pipelines
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, transform, filter, probabilistic_sampler, batch]
+      exporters: [debug, otlphttp/dynatrace]
+    
+    # Metrics pipeline
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, cumulativetodelta, transform, batch]
+      exporters: [debug, otlphttp/dynatrace]
+    
+    # Logs pipeline
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, otlphttp/dynatrace]
